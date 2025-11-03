@@ -1,6 +1,6 @@
 **Is it a bug of the integration or add-on?**
 The BACnet interface consists of 2 parts, the integration and the add-on.
-If the add-on isn't functioning correctly, please make an issue [here](https://github.com/Bepacom-Raalte/bepacom-HA-Addons)!
+If the add-on isn't functioning correctly, please make an issue [here](https://github.com/NemiahUK/bepacom-HA-Addons)!
 
 **Upload log files**
 Please upload a couple of log files that could help understand the problem.

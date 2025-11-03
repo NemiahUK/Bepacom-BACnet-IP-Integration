@@ -57,6 +57,15 @@ async def async_setup_entry(
                         coordinator=coordinator, deviceid=deviceid, objectid=objectid
                     )
                 )
+            elif (
+                coordinator.data.devices[deviceid].objects[objectid].objectIdentifier[0]
+                == "accumulator"
+            ):
+                entity_list.append(
+                    AccumulatorEntity(
+                        coordinator=coordinator, deviceid=deviceid, objectid=objectid
+                    )
+                )
             # elif coordinator.data.devices[deviceid].objects[objectid].objectType == 'accumulator':
             #    entity_list.append(AnalogInputEntity(coordinator=coordinator, deviceid=deviceid, objectid=objectid))
             # elif coordinator.data.devices[deviceid].objects[objectid].objectType == 'averaging':
@@ -317,3 +326,132 @@ class MultiStateInputEntity(
             .objects[self.deviceid]
             .modelName,
         )
+
+
+class AccumulatorEntity(CoordinatorEntity[EcoPanelDataUpdateCoordinator], SensorEntity):
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: EcoPanelDataUpdateCoordinator,
+        deviceid: str,
+        objectid: str,
+    ):
+        """Initialize a BACnet Accumulator object as entity."""
+        super().__init__(coordinator=coordinator)
+        self.deviceid = deviceid
+        self.objectid = objectid
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self.deviceid}_{self.objectid}"
+
+    @property
+    def name(self) -> str:
+        name = self.coordinator.config_entry.data.get(CONF_NAME, "object_name")
+        if name == "description":
+            return f"{self.coordinator.data.devices[self.deviceid].objects[self.objectid].description}"
+        elif name == "object_identifier":
+            identifier = (
+                self.coordinator.data.devices[self.deviceid]
+                .objects[self.objectid]
+                .objectIdentifier
+            )
+            return f"{identifier[0]}:{identifier[1]}"
+        else:
+            return f"{self.coordinator.data.devices[self.deviceid].objects[self.objectid].objectName}"
+
+    @property
+    def entity_registry_enabled_default(self) -> bool:
+        """Return if the entity should be enabled when first added to the entity registry."""
+        return self.coordinator.config_entry.data.get(CONF_ENABLED, False)
+
+    @property
+    def native_value(self):
+        value = (
+            self.coordinator.data.devices[self.deviceid]
+            .objects[self.objectid]
+            .presentValue
+        )
+        if value is None:
+            return value
+        # Accumulator is a counter, provide integer where possible
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return value
+
+    @property
+    def icon(self):
+        # Counter/energy-like icon
+        return "mdi:counter"
+
+    @property
+    def device_class(self) -> str | None:
+        if (
+            units := self.coordinator.data.devices[self.deviceid]
+            .objects[self.objectid]
+            .units
+        ):
+            return bacnet_to_device_class(units, DEVICE_CLASS_UNITS)
+        else:
+            return None
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        if (
+            units := self.coordinator.data.devices[self.deviceid]
+            .objects[self.objectid]
+            .units
+        ):
+            return bacnet_to_ha_units(units)
+        else:
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "inAlarm": bool(
+                self.coordinator.data.devices[self.deviceid]
+                .objects[self.objectid]
+                .statusFlags[0]
+            ),
+            "fault": bool(
+                self.coordinator.data.devices[self.deviceid]
+                .objects[self.objectid]
+                .statusFlags[1]
+            ),
+            "overridden": bool(
+                self.coordinator.data.devices[self.deviceid]
+                .objects[self.objectid]
+                .statusFlags[2]
+            ),
+            "outOfService": bool(
+                self.coordinator.data.devices[self.deviceid]
+                .objects[self.objectid]
+                .statusFlags[3]
+            ),
+        }
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.deviceid)},
+            name=f"{self.coordinator.data.devices[self.deviceid].objects[self.deviceid].objectName}",
+            manufacturer=self.coordinator.data.devices[self.deviceid]
+            .objects[self.deviceid]
+            .vendorName,
+            model=self.coordinator.data.devices[self.deviceid]
+            .objects[self.deviceid]
+            .modelName,
+        )
+
+    @property
+    def state_class(self) -> str:
+        # For energy/volume counters expose as total_increasing
+        if self.native_unit_of_measurement in UnitOfEnergy:
+            return SensorStateClass.TOTAL_INCREASING
+        elif self.native_unit_of_measurement in UnitOfVolume:
+            return SensorStateClass.TOTAL_INCREASING
+        else:
+            return SensorStateClass.MEASUREMENT
