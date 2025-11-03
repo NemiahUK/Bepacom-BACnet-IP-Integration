@@ -15,6 +15,7 @@ It currently supports these BACnet object types:
 - Multi State Input
 - Multi State Output
 - Multi State Value
+- Accumulator
 
 <img src="https://raw.githubusercontent.com/NemiahUK/Bepacom-BACnet-IP-Integration/main/images/integrationadded.png"/>
 
